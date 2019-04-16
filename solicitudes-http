@@ -1,0 +1,71 @@
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { createStore, combineReducers, applyMiddleware } from 'redux';
+import { Provider, connect } from 'react-redux';
+import promiseMiddleware from 'redux-promise-middleware';
+import axios from 'axios';
+
+const BASE_URL = "http://148.223.224.76/v1/curso";
+
+const GET_DATA_REDUCER = (state = [], { type, payload }) => {
+	switch(type){
+		case "GET_DATA_PENDING": return [{ nombre: "Pending" }];
+		case "GET_DATA_FULFILLED": return payload.data.datos;
+		case "GET_DATA_REJECTED": return [{ nombre: "Error" }];
+		default: return [...state];
+	}
+};
+
+const GET_DATA_ACTION = () => {
+	return {
+		type: "GET_DATA",
+		payload: axios.get(BASE_URL + "/datos")
+	};
+};
+
+const CATALOGO = combineReducers({
+	datosState: GET_DATA_REDUCER
+});
+
+const Store = createStore(CATALOGO, applyMiddleware(promiseMiddleware));
+
+class Demo extends React.Component {
+	render(){
+		return (
+			<div>
+				{ this._renderNames() }
+				<button onClick={this.props.getData}>Get Data</button>
+			</div>
+		);
+	}
+
+	_renderNames = () => {
+		return this.props.datosState.map((item) => {
+			if(item){
+				return <h1>{ item.nombre }</h1>
+			}
+		});
+	}
+}
+
+const mapStateToProps = ({ datosState }) => {
+	return {
+		datosState: datosState
+	};
+}
+
+const mapDispatchToProps = (dispatch) => {
+	return {
+		getData: () => {
+			return dispatch(GET_DATA_ACTION());
+		}
+	};
+};
+
+const ConnectDemo = connect(mapStateToProps, mapDispatchToProps)(Demo);
+
+ReactDOM.render(
+	<Provider store={Store}>
+		<ConnectDemo/>
+	</Provider>
+, document.getElementById('root'));
