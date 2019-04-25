@@ -1,0 +1,229 @@
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { createStore, combineReducers, applyMiddleware } from 'redux';
+import { Provider, connect } from 'react-redux';
+import promiseMiddleware from 'redux-promise-middleware';
+import axios from 'axios';
+
+const BASE_URL = "http://148.223.224.76/v1/curso";
+
+const GET_DATOS_REDUCER = (state = [], action) => {
+	switch(action.type){
+		case "GET_DATOS_PENDING": return state;
+		case "GET_DATOS_FULFILLED": return action.payload.data.datos;
+		case "GET_DATOS_REJECTED": return state;
+		default: return state;
+	}
+};
+
+const NEW_DATOS_REDUCER = (state = {}, action) => {
+	switch(action.type){
+		case "NEW_DATOS_PENDING": return { status: "Pending" };
+		case "NEW_DATOS_FULFILLED": return { status: action.payload.data.success };
+		case "NEW_DATOS_REJECTED": return { status: "Error" };
+		default: return state;
+	}
+};
+
+const UPDATE_DATOS_REDUCER = (state = {}, action) => {
+	switch(action.type){
+		case "UPDATE_DATOS_PENDING": return { status: "Pending" };
+		case "UPDATE_DATOS_FULFILLED": return { status: action.payload.data.success };
+		case "UPDATE_DATOS_REJECTED": return { status: "Error" };
+		default: return state;
+	}
+};
+
+const DELETE_DATOS_REDUCER = (state = {}, action) => {
+	switch(action.type){
+		case "DELETE_DATOS_PENDING": return { status: "Pending" };
+		case "DELETE_DATOS_FULFILLED": return { status: action.payload.data.success };
+		case "DELETE_DATOS_REJECTED": return { status: "Error" };
+		default: return state;
+	}
+};
+
+const GET_DATOS_ACTION = () => {
+	return {
+		type: "GET_DATOS",
+		payload: axios.get(BASE_URL + "/datos")
+	};
+}
+
+const NEW_DATOS_ACTION = (mi_nombre) => {
+	return {
+		type: "NEW_DATOS",
+		payload: axios.post(BASE_URL + "/dato", { nombre: mi_nombre })
+	};
+}
+
+const UPDATE_DATOS_ACTION = (id, nuevo_nombre) => {
+	return {
+		type: "UPDATE_DATOS",
+		payload: axios.put(BASE_URL + "/dato?id=" + id, { nombre: nuevo_nombre })
+	};
+}
+
+const DELETE_DATOS_ACTION = (id) => {
+	return {
+		type: "DELETE_DATOS",
+		payload: axios.delete(BASE_URL + "/dato?id=" + id)
+	};
+}
+
+const Catalogo = combineReducers({
+	stateDatos: GET_DATOS_REDUCER,
+	responseNewDato: NEW_DATOS_REDUCER,
+	responseDeleteDato: DELETE_DATOS_REDUCER,
+	responseUpdateDato: UPDATE_DATOS_REDUCER
+});
+
+const Store = createStore(Catalogo, applyMiddleware(promiseMiddleware));
+
+class Item extends React.Component {
+
+	state = {
+		mode: 'vista'
+	};
+
+	componentWillReceiveProps(nextProps){
+		const PropsActuales = this.props;
+		const PropsNuevas = nextProps;
+
+		if(PropsActuales.responseUpdateDato.status === "Pending" && PropsNuevas.responseUpdateDato.status === "OK"){
+			this.props.getDatos();
+		}
+	}
+
+	render(){
+		return (
+			<div>
+				{ this._renderMode() }
+				{ this._renderActions() }
+			</div>
+		);
+	}
+
+	_renderMode = () => {
+		let show = (<h1>{ this.props.data.nombre }</h1>);
+
+		if(this.state.mode !== 'vista'){
+			show = (<input ref="edicion_nombre" defaultValue={this.props.data.nombre} />);
+		}
+
+		return show;
+	}
+
+	_renderActions = () => {
+		const id = this.props.data.id;
+		let btn = (
+			<button
+				onClick={() => {
+					this.setState({ mode: 'edicion' });
+				}}
+			>Editar</button>
+		);
+
+		if(this.state.mode !== 'vista'){
+			btn = (
+				<button
+					onClick={() => {
+						const nombre = this.refs.edicion_nombre.value;
+						this.props.updateDato(id, nombre);
+						this.setState({ mode: 'vista' });
+					}}
+				>Guardar</button>
+			);
+		}
+
+		return (
+			<div>
+				{ btn }
+				<button onClick={this.props.deleteDato.bind(this, id)}>Eliminar</button>
+			</div>
+		);
+	}
+};
+
+const itemMapStateToProps = ({ responseUpdateDato }) => {
+	return {
+		responseUpdateDato: responseUpdateDato
+	};
+}
+
+const itemMapDispatchToProps = (dispatch) => {
+	return {
+		getDatos: () => dispatch(GET_DATOS_ACTION()),
+		deleteDato: (id) => dispatch(DELETE_DATOS_ACTION(id)),
+		updateDato: (id, nuevo_nombre) => dispatch(UPDATE_DATOS_ACTION(id, nuevo_nombre))
+	}
+}
+
+const ItemConnect = connect(itemMapStateToProps, itemMapDispatchToProps)(Item);
+
+class ViewDatos extends React.Component {
+
+	componentDidMount(){
+		this.props.getDatos();
+	}
+
+	componentWillReceiveProps(nextProps){
+		const PropsActuales = this.props;
+		const PropsNuevas = nextProps;
+		if(PropsActuales.responseNewDato.status === "Pending" && PropsNuevas.responseNewDato.status === "OK"){
+			this.refs.new_dato.value = "";
+			this.props.getDatos();
+		}
+
+		if(PropsActuales.responseDeleteDato.status === "Pending" && PropsNuevas.responseDeleteDato.status === "OK"){
+			this.props.getDatos();
+		}
+	}
+
+	render(){
+		return (
+			<div>
+				<input ref="new_dato" placeholder="Nuevo Nombre"/>
+				<button
+					onClick={() => {
+						const el_nombre = this.refs.new_dato.value;
+						this.props.sendDato(el_nombre);
+					}}
+				>Send Dato</button>
+				<hr/>
+				{ this._renderGetDatos() }
+			</div>
+		);
+	}
+
+	_renderGetDatos = () => {
+		return this.props.stateDatos.reverse().map((dato) => {
+			if(dato){
+				return <ItemConnect data={dato}/>;
+			}
+		})
+	}
+}
+
+const mapStateToProps = ({ stateDatos, responseNewDato, responseDeleteDato }) => {
+	return {
+		stateDatos: stateDatos,
+		responseNewDato: responseNewDato,
+		responseDeleteDato: responseDeleteDato
+	};
+}
+
+const mapDispatchToProps = (dispatch) => {
+	return {
+		getDatos: () => dispatch(GET_DATOS_ACTION()),
+		sendDato: (un_nombre) => dispatch(NEW_DATOS_ACTION(un_nombre))
+	}
+}
+
+const RenderViewDatos = connect(mapStateToProps, mapDispatchToProps)(ViewDatos);
+
+ReactDOM.render(
+<Provider store={Store}>
+	<RenderViewDatos/>
+</Provider>	
+, document.getElementById('root'));
